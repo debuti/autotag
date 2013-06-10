@@ -37,7 +37,7 @@ import urllib
 KIBI = 1024
 MEBI = 1024 * KIBI
 LOG_MODE = "Screen"
-LOG_LEVEL = logging.INFO
+LOG_LEVEL = logging.DEBUG
 LOG_MAX_BYTES = 1 * MEBI
 
 APIKEY = "TKTD9246TZYXHOE2P"
@@ -66,8 +66,6 @@ for infile in glob.glob(os.path.join(libPath, '*.*')):
     sys.path.insert(0, infile)
     
 import thepyutilities.shellutils as shellutils
-
-import eyed3
 
 
 # Usage function, logs, utils and check input
@@ -151,7 +149,27 @@ def checkInput():
 def areToolsInstalled():
     '''
     '''
-    return shellutils.executableExists("echoprint-codegen")
+    result = True
+    softwareNeeded = [{'sw':"echoprint-codegen", 
+                       'message':"""Tool needed not found. Install it by typing: 
+ sudo apt-get install ffmpeg libboost-all-dev libtag1-dev zlib1g-dev git eyed3
+ git clone -b release-4.12 git://github.com/echonest/echoprint-codegen.git
+ cd echoprint-codegen/
+ cd src/
+ make
+ cd ..
+ cd ..
+ mv echoprint-codegen /usr/local/.
+ ln -s /usr/local/echoprint-codegen/echoprint-codegen /usr/bin/echoprint-codegen"""},
+                      {'sw':"eyeD3", 'message':"""Tool needed not found. Install it by typing: 
+ sudo apt-get install eyed3"""},
+]
+    for software in softwareNeeded:
+        if not shellutils.executableExists(software['sw']):
+            print software['message']
+            result = False
+            
+    return result
 
 def echoprint(audiofile):
     '''
@@ -190,38 +208,40 @@ def echoprint(audiofile):
 def writeTags(artist, title, album, tracknum, year, audiofile):
     '''
     '''
-    def toUnicode(input):
-        '''
-        '''
-        try:
-            # translate an Unicode string into a sequence of bytes is called encoding
-            def to_unicode_or_bust(obj, encoding='utf-8'):
-                if isinstance(obj, basestring):
-                    if not isinstance(obj, unicode):
-                        obj = unicode(obj, encoding)
-                return obj
-         
-            return to_unicode_or_bust(input)
-
-        except UnicodeDecodeError as e:
-            print ("toUnicode: UnicodeDecodeError: " + e.reason + " on string \"" + e.object + "\" positions: " + str(e.start) + "-" + str(e.end))
-        
-    audiofileLoaded = eyed3.load(audiofile)
-    if audiofileLoaded.tag != None:
-        audiofileLoaded.tag.artist = toUnicode(artist)
-        audiofileLoaded.tag.album = toUnicode(album)
-        audiofileLoaded.tag.title = toUnicode(title)
-        audiofileLoaded.tag.track_num = tracknum
-        audiofileLoaded.tag.year = year
-        audiofileLoaded.tag.save()
+    
+    def escapeCharacters(input):
+        #return input.replace("'", "") # Not needed!
+        return input
+    
+    # Clear tags and write new ones
+    command = ["eyeD3", 
+                "--remove-all"]
+    if artist != None:
+        command.append("-a")
+        command.append(escapeCharacters(artist))
+    if album != None:
+        command.append("-A")
+        command.append(escapeCharacters(album))
+    if title != None:
+        command.append("-t")
+        command.append(escapeCharacters(title))
+    if tracknum != None:
+        command.append("-n")
+        command.append(str(tracknum))
+    if year != None:
+        command.append("-Y")
+        command.append(str(year))
+    command.append(audiofile)
+                
+    logging.debug("  %s" % " ".join(map(str, command)));
+    status, stdout, stderr = shellutils.run(command);
+    if status == 0:
         logging.info("File modified: " + audiofile)
         logging.info("  Artist: " + str(artist))
         logging.info("  Title:  " + str(title))
         logging.info("  Album:  " + str(album))
         logging.info("  Track#: " + str(tracknum))
         logging.info("  Year:   " + str(year))
-    else:
-        logging.error("File has no tag info: " + audiofile)
 
     
 # Main function
@@ -252,17 +272,6 @@ if __name__ == '__main__':
     try:
         if areToolsInstalled():
             main()
-        else:
-            print """Tools needed not found. Install it by typing: 
-sudo apt-get install ffmpeg libboost-all-dev libtag1-dev zlib1g-dev git eyed3
-git clone -b release-4.12 git://github.com/echonest/echoprint-codegen.git
-cd echoprint-codegen/
-cd src/
-make
-cd ..
-cd ..
-mv echoprint-codegen /usr/local/.
-ln -s /usr/local/echoprint-codegen/echoprint-codegen /usr/bin/echoprint-codegen"""
     
     except KeyboardInterrupt:
         print "Shutdown requested. Exiting"
