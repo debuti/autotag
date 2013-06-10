@@ -126,6 +126,9 @@ def checkInput():
                               version=__version__,
                               usage='''%prog [options] <files>''') 
     # Define the options. Do not use -h nor -v, the are reserved to help and version automaticly
+    p.add_option('--rename', '-r', action="store", type="string", dest="rename", help='If setted will rename to regexp. The wildcards matches the program options. Ex. "%a - %t" will rename to "artist - title"')
+    p.add_option('--dont-erase', '-d', action="store_true", dest="donterase", help='If setted eyed3 will not call \"--remove-all\"')
+    
     p.add_option('--title', '-t', action="store", type="string", dest="title", help='The title. Overwritten if the analysis returns something useful')
     p.add_option('--artist', '-a', action="store", type="string", dest="artist", help='The artist. Overwritten if the analysis returns something useful')
     p.add_option('--album','-A', action="store", type="string", dest="album", help='The album')
@@ -142,6 +145,9 @@ def checkInput():
              'tracknum':options.tracknum, 
              'year':options.year,
             }, 
+            {'rename': options.rename,
+             'donterase': options.donterase,
+            },
             arguments]
     
 
@@ -205,7 +211,7 @@ def echoprint(audiofile):
         
     return [artist, title]
     
-def writeTags(artist, title, album, tracknum, year, audiofile):
+def writeTags(artist, title, album, tracknum, year, options, audiofile):
     '''
     '''
     
@@ -214,8 +220,9 @@ def writeTags(artist, title, album, tracknum, year, audiofile):
         return input
     
     # Clear tags and write new ones
-    command = ["eyeD3", 
-                "--remove-all"]
+    command = ["eyeD3"]
+    if options['donterase'] == None:
+        command.append("--remove-all")
     if artist != None:
         command.append("-a")
         command.append(escapeCharacters(artist))
@@ -242,10 +249,26 @@ def writeTags(artist, title, album, tracknum, year, audiofile):
         logging.info("  Album:  " + str(album))
         logging.info("  Track#: " + str(tracknum))
         logging.info("  Year:   " + str(year))
+    
+def rename(artist, title, album, tracknum, year, options, audiofile):
+    '''
+    '''
+    def escapeCharacters(input):
+        return input.replace("'", "") # Not needed!
+    
+    newname = options['rename']
+    newname = newname.replace("%a", escapeCharacters(artist))
+    newname = newname.replace("%A", escapeCharacters(album))
+    newname = newname.replace("%t", escapeCharacters(title))
+    newname = newname.replace("%n", str(tracknum))
+    newname = newname.replace("%Y", str(year))
+    newname = os.path.join(shellutils.dirname(audiofile), newname + shellutils.extension(audiofile))
+    shellutils.mv(audiofile, newname)
+    logging.info("File renamed to: " + newname)
 
     
 # Main function
-def core(properties, files):
+def core(properties, options, files):
     '''This is the core, all program logic is performed here
     '''
     for audiofile in files:
@@ -256,14 +279,25 @@ def core(properties, files):
                   properties['album'], 
                   properties['tracknum'], 
                   properties['year'],
+                  options,
                   audiofile)
+         
+        if options['rename'] != None:
+            rename(fetchedArtist or properties['artist'], 
+                   fetchedTitle or properties['title'], 
+                   properties['album'], 
+                   properties['tracknum'], 
+                   properties['year'],
+                   options, 
+                   audiofile)
 
 def main():
     '''This is the main procedure, is detached to provide compatibility with the updater
     '''
     openLog(LOG_MODE, LOG_LEVEL)
-    [properties, files] = checkInput()
-    core(properties, files)
+    [properties, options, files] = checkInput()
+    logging.debug(str([properties, options, files]))
+    core(properties, options, files)
     closeLog()
 
     
