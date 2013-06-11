@@ -129,26 +129,32 @@ def checkInput():
     p.add_option('--rename', '-r', action="store", type="string", dest="rename", help='If setted will rename to regexp. The wildcards matches the program options. Ex. "%a - %t" will rename to "artist - title"')
     p.add_option('--dont-erase', '-d', action="store_true", dest="donterase", help='If setted eyed3 will not call \"--remove-all\"')
     
-    p.add_option('--title', '-t', action="store", type="string", dest="title", help='The title. Overwritten if the analysis returns something useful')
     p.add_option('--artist', '-a', action="store", type="string", dest="artist", help='The artist. Overwritten if the analysis returns something useful')
+    p.add_option('--title', '-t', action="store", type="string", dest="title", help='The title. Overwritten if the analysis returns something useful')
     p.add_option('--album','-A', action="store", type="string", dest="album", help='The album')
     p.add_option('--track-num','-n', action="store", type="int", dest="tracknum", help='The track number')
     p.add_option('--year','-Y', action="store", type="int", dest="year", help='The year')
-
+    p.add_option('--albumartist','-T', action="store", type="string", dest="albumartist", help='The album artist')
+    
     # Parse the commandline
     options, arguments = p.parse_args()
 
     # Decide what to do
-    return [{'title':options.title, 
-             'artist':options.artist, 
-             'album':options.album, 
-             'tracknum':options.tracknum, 
-             'year':options.year,
-            }, 
-            {'rename': options.rename,
-             'donterase': options.donterase,
-            },
-            arguments]
+    if len(arguments) == 0:
+        p.print_help()
+        sys.exit(-1)
+    else:
+        return [{'artist':options.artist, 
+                 'title':options.title, 
+                 'album':options.album, 
+                 'tracknum':options.tracknum, 
+                 'year':options.year,
+                 'albumartist':options.albumartist,
+                }, 
+                {'rename': options.rename,
+                 'donterase': options.donterase,
+                },
+                arguments]
     
 
 # Helper functions
@@ -211,57 +217,56 @@ def echoprint(audiofile):
         
     return [artist, title]
     
-def writeTags(artist, title, album, tracknum, year, options, audiofile):
+def writeTags(properties, options, audiofile):
+    ''' Write tags with eyed3
     '''
-    '''
-    
     def escapeCharacters(input):
-        #return input.replace("'", "") # Not needed!
-        return input
+        return str(input)
     
     # Clear tags and write new ones
     command = ["eyeD3"]
     if options['donterase'] == None:
         command.append("--remove-all")
-    if artist != None:
+    if properties['artist'] != None:
         command.append("-a")
-        command.append(escapeCharacters(artist))
-    if album != None:
-        command.append("-A")
-        command.append(escapeCharacters(album))
-    if title != None:
+        command.append(escapeCharacters(properties['artist']))
+    if properties['title'] != None:
         command.append("-t")
-        command.append(escapeCharacters(title))
-    if tracknum != None:
+        command.append(escapeCharacters(properties['title']))
+    if properties['album'] != None:
+        command.append("-A")
+        command.append(escapeCharacters(properties['album']))
+    if properties['tracknum'] != None:
         command.append("-n")
-        command.append(str(tracknum))
-    if year != None:
+        command.append(str(properties['tracknum']))
+    if properties['year'] != None:
         command.append("-Y")
-        command.append(str(year))
+        command.append(str(properties['year']))
+    if properties['albumartist'] != None:
+        command.append("--set-user-text-frame=ALBUMARTISTSORT:" + escapeCharacters(properties['albumartist']))
     command.append(audiofile)
                 
     logging.debug("  %s" % " ".join(map(str, command)));
     status, stdout, stderr = shellutils.run(command);
     if status == 0:
         logging.info("File modified: " + audiofile)
-        logging.info("  Artist: " + str(artist))
-        logging.info("  Title:  " + str(title))
-        logging.info("  Album:  " + str(album))
-        logging.info("  Track#: " + str(tracknum))
-        logging.info("  Year:   " + str(year))
+        for key in properties.keys():
+            if properties[key] != None:
+                logging.info("  "+key+": \t" + str(properties[key]))
     
-def rename(artist, title, album, tracknum, year, options, audiofile):
+def rename(properties, options, audiofile):
     '''
     '''
     def escapeCharacters(input):
         return input.replace("'", "") # Not needed!
     
     newname = options['rename']
-    newname = newname.replace("%a", escapeCharacters(artist))
-    newname = newname.replace("%A", escapeCharacters(album))
-    newname = newname.replace("%t", escapeCharacters(title))
-    newname = newname.replace("%n", str(tracknum))
-    newname = newname.replace("%Y", str(year))
+    newname = newname.replace("%a", escapeCharacters(properties['artist']))
+    newname = newname.replace("%t", escapeCharacters(properties['title']))
+    newname = newname.replace("%A", escapeCharacters(properties['album']))
+    newname = newname.replace("%n", str(properties['tracknum']))
+    newname = newname.replace("%Y", str(properties['year']))
+    newname = newname.replace("%T", str(properties['albumartist']))
     newname = os.path.join(shellutils.dirname(audiofile), newname + shellutils.extension(audiofile))
     shellutils.mv(audiofile, newname)
     logging.info("File renamed to: " + newname)
@@ -274,20 +279,15 @@ def core(properties, options, files):
     for audiofile in files:
         [fetchedArtist, fetchedTitle] = echoprint(audiofile)
         
-        writeTags(fetchedArtist or properties['artist'], 
-                  fetchedTitle or properties['title'], 
-                  properties['album'], 
-                  properties['tracknum'], 
-                  properties['year'],
+        properties['artist'] = fetchedArtist or properties['artist']
+        properties['title'] = fetchedTitle or properties['title']
+        
+        writeTags(properties,
                   options,
                   audiofile)
          
         if options['rename'] != None:
-            rename(fetchedArtist or properties['artist'], 
-                   fetchedTitle or properties['title'], 
-                   properties['album'], 
-                   properties['tracknum'], 
-                   properties['year'],
+            rename(properties,
                    options, 
                    audiofile)
 
