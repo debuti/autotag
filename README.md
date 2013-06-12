@@ -10,6 +10,7 @@ Usage
 
 Extracted from command help (-h switch):
 
+```
 Usage: autotag [options] <files>
 
 Options:
@@ -33,7 +34,7 @@ Options:
   -Y YEAR, --year=YEAR  The year
   -T ALBUMARTIST, --albumartist=ALBUMARTIST
                         The album artist
-
+```
                         
 Dependencies
 ============
@@ -50,7 +51,7 @@ If you like my work, buy me a drink https://www.paypal.com/cgi-bin/webscr?cmd=_s
 
 License
 =======
-
+```
                     GNU GENERAL PUBLIC LICENSE
                        Version 3, 29 June 2007
 
@@ -726,3 +727,4 @@ the library.  If this is what you want to do, use the GNU Lesser General
 Public License instead of this License.  But first, please read
 <http://www.gnu.org/philosophy/why-not-lgpl.html>.
 
+```
