@@ -20,7 +20,10 @@ Options:
                         If setted will rename to regexp. The wildcards matches
                         the program options. Ex. "%a - %t" will rename to
                         "artist - title"
+  -N, --auto-track-num  Auto track number: Use a consecutive number for each
+                        file (Caution, this superseed -n)
   -d, --dont-erase      If setted eyed3 will not call "--remove-all"
+  -s, --ask             Ask for confirmation before doing anything
   -a ARTIST, --artist=ARTIST
                         The artist. Overwritten if the analysis returns
                         something useful
@@ -34,6 +37,12 @@ Options:
   -Y YEAR, --year=YEAR  The year
   -T ALBUMARTIST, --albumartist=ALBUMARTIST
                         The album artist
+
+ Examples:
+  - Make a custom album
+     autotag -N -s -r %n\ -\ %a\ -\ %t -A My\ album -Y 2014 -T Various\ Artists <dir>\*mp3
+  - Make BorjueloMix
+     autotag -N -s -r %n\ -\ %a\ -\ %t -A BorjueloMix2011 -Y 2011 -T Various\ Artists /media/dropbox/Queues/nettop/Music/youtubeSingles/2011/*mp3
 ```
                         
 Dependencies

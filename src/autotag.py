@@ -7,14 +7,19 @@ __program__ = 'autotag'
 # Package:
 __package__ = ''
 # Descrip: 
-__description__ = ''''''
+__description__ = '''CLI application for tagging and guessing tags on music files. Also implements 
+a pattern renamer.'''
 # Version: 
-__version__ = '0.0.0'
+__version__ = '1.0.0'
 #    Date:
-__date__ = '20130610'
+__date__ = '20140702'
 # License: This script doesn't require any license since it's not intended to be redistributed.
 #          In such case, unless stated otherwise, the purpose of the author is to follow GPLv3.
 # History: 
+#          1.0.0 (20140702)
+#            -First stable version
+#            -Added auto numbering
+#            -Fixed some bugs
 #          0.0.0 (20130610)
 #            -Initial release
 ###############################################################################################
@@ -120,21 +125,29 @@ def closeLog():
 def checkInput():
     '''This function is for treat the user command line parameters.
     '''
+    # Custom parser to show epilog info
+    class MyParser(optparse.OptionParser):
+        def format_epilog(self, formatter):
+            return self.epilog
+
     examples = """
  Examples:
   - Make a custom album
-     autotag -A My\ album -Y 2014 -T Various\ Artists <dir>\*
-               """
+     autotag -N -s -r %n\ -\ %a\ -\ %t -A My\ album -Y 2014 -T Various\ Artists <dir>\*mp3
+  - Make BorjueloMix
+     autotag -N -s -r %n\ -\ %a\ -\ %t -A BorjueloMix2011 -Y 2011 -T Various\ Artists /media/dropbox/Queues/nettop/Music/youtubeSingles/2011/*mp3
+"""
 
     # Create instance of OptionParser Module, included in Standard Library
-    p = optparse.OptionParser(description=__description__,
-                              prog=__program__,
-                              version=__version__,
-                              usage='''%prog [options] <files>''', 
-                              epilog=examples) 
+    p = MyParser(description=__description__,
+                 prog=__program__,
+                 version=__version__,
+                 usage='''%prog [options] <files>''', 
+                 epilog=examples) 
 
     # Define the options. Do not use -h nor -v, the are reserved to help and version automaticly
     p.add_option('--rename', '-r', action="store", type="string", dest="rename", help='If setted will rename to regexp. The wildcards matches the program options. Ex. "%a - %t" will rename to "artist - title"')
+    p.add_option('--auto-track-num','-N', action="store_true", dest="autotracknum", help='Auto track number: Use a consecutive number for each file (Caution, this superseed -n)')
     p.add_option('--dont-erase', '-d', action="store_true", dest="donterase", help='If setted eyed3 will not call \"--remove-all\"')
     p.add_option('--ask', '-s', action="store_true", dest="ask", help='Ask for confirmation before doing anything')
     
@@ -143,7 +156,7 @@ def checkInput():
     p.add_option('--album','-A', action="store", type="string", dest="album", help='The album')
     p.add_option('--track-num','-n', action="store", type="int", dest="tracknum", help='The track number')
     p.add_option('--year','-Y', action="store", type="int", dest="year", help='The year')
-    p.add_option('--albumartist','-T', action="store", type="string", dest="albumartist", help='The album artist (Maybe "Various Artists"?)')
+    p.add_option('--albumartist','-T', action="store", type="string", dest="albumartist", help='The album artist')
     
     # Parse the commandline
     options, arguments = p.parse_args()
@@ -164,6 +177,7 @@ def checkInput():
                 {'rename':options.rename,
                  'donterase':options.donterase,
                  'ask':options.ask,
+                 'autotracknum':options.autotracknum,
                 },
                 arguments]
     
@@ -193,7 +207,6 @@ def areToolsInstalled():
             result = False
             
     return result
-
 
 def echoprint(audiofile):
     '''
@@ -231,7 +244,6 @@ def echoprint(audiofile):
         
     return [artist, title]
 
-    
 def writeTags(properties, options, audiofile):
     ''' Write tags with eyed3
     '''
@@ -268,7 +280,6 @@ def writeTags(properties, options, audiofile):
             if properties[key] != None:
                 logging.info("  "+key+": \t" + str(properties[key]))
         logging.info("File modified: " + audiofile)
-    
 
 def rename(properties, options, audiofile):
     '''
@@ -276,7 +287,11 @@ def rename(properties, options, audiofile):
     def escapeCharacters(input):
         return input.replace("'", "")
     
+    # Import the regular expression
     newname = options['rename']
+
+    # TODO: Check if something would remain unchanged in the filename
+    # Substitute every item
     newname = newname.replace("%a", escapeCharacters(properties['artist']))
     newname = newname.replace("%t", escapeCharacters(properties['title']))
     newname = newname.replace("%A", escapeCharacters(properties['album']))
@@ -292,7 +307,7 @@ def rename(properties, options, audiofile):
 def core(properties, options, files):
     '''This is the core, all program logic is performed here
     '''
-    for audiofile in files:
+    for index, audiofile in enumerate(files):
         # Do dict initialization
         values = {}
 
@@ -301,7 +316,10 @@ def core(properties, options, files):
         values['artist'] = fetchedArtist or properties['artist']
         values['title'] = fetchedTitle or properties['title']
         values['album'] = properties['album']
-        values['tracknum'] = properties['tracknum']
+        if options['autotracknum']:
+            values['tracknum'] = "%03d" % (index + 1)
+        else:
+            values['tracknum'] = properties['tracknum']
         values['albumartist'] = properties['albumartist']
         values['year'] = properties['year']
         
