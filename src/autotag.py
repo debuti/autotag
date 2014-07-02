@@ -120,21 +120,30 @@ def closeLog():
 def checkInput():
     '''This function is for treat the user command line parameters.
     '''
+    examples = """
+ Examples:
+  - Make a custom album
+     autotag -A My\ album -Y 2014 -T Various\ Artists <dir>\*
+               """
+
     # Create instance of OptionParser Module, included in Standard Library
     p = optparse.OptionParser(description=__description__,
                               prog=__program__,
                               version=__version__,
-                              usage='''%prog [options] <files>''') 
+                              usage='''%prog [options] <files>''', 
+                              epilog=examples) 
+
     # Define the options. Do not use -h nor -v, the are reserved to help and version automaticly
     p.add_option('--rename', '-r', action="store", type="string", dest="rename", help='If setted will rename to regexp. The wildcards matches the program options. Ex. "%a - %t" will rename to "artist - title"')
     p.add_option('--dont-erase', '-d', action="store_true", dest="donterase", help='If setted eyed3 will not call \"--remove-all\"')
+    p.add_option('--ask', '-s', action="store_true", dest="ask", help='Ask for confirmation before doing anything')
     
     p.add_option('--artist', '-a', action="store", type="string", dest="artist", help='The artist. Overwritten if the analysis returns something useful')
     p.add_option('--title', '-t', action="store", type="string", dest="title", help='The title. Overwritten if the analysis returns something useful')
     p.add_option('--album','-A', action="store", type="string", dest="album", help='The album')
     p.add_option('--track-num','-n', action="store", type="int", dest="tracknum", help='The track number')
     p.add_option('--year','-Y', action="store", type="int", dest="year", help='The year')
-    p.add_option('--albumartist','-T', action="store", type="string", dest="albumartist", help='The album artist')
+    p.add_option('--albumartist','-T', action="store", type="string", dest="albumartist", help='The album artist (Maybe "Various Artists"?)')
     
     # Parse the commandline
     options, arguments = p.parse_args()
@@ -144,6 +153,7 @@ def checkInput():
         p.print_help()
         sys.exit(-1)
     else:
+        # Return as [properties, options, files]
         return [{'artist':options.artist, 
                  'title':options.title, 
                  'album':options.album, 
@@ -151,8 +161,9 @@ def checkInput():
                  'year':options.year,
                  'albumartist':options.albumartist,
                 }, 
-                {'rename': options.rename,
-                 'donterase': options.donterase,
+                {'rename':options.rename,
+                 'donterase':options.donterase,
+                 'ask':options.ask,
                 },
                 arguments]
     
@@ -164,8 +175,8 @@ def areToolsInstalled():
     result = True
     softwareNeeded = [{'sw':"echoprint-codegen", 
                        'message':"""Tool needed not found. Install it by typing: 
- sudo apt-get install ffmpeg libboost-all-dev libtag1-dev zlib1g-dev git eyed3
- git clone -b release-4.12 git://github.com/echonest/echoprint-codegen.git
+ sudo apt-get install ffmpeg libboost-all-dev libtag1-dev zlib1g-dev git
+ git clone -b release-4.12 http://github.com/echonest/echoprint-codegen.git
  cd echoprint-codegen/
  cd src/
  make
@@ -182,6 +193,7 @@ def areToolsInstalled():
             result = False
             
     return result
+
 
 def echoprint(audiofile):
     '''
@@ -212,10 +224,13 @@ def echoprint(audiofile):
         if status == 0 and len(weboutDecoded['response']['songs']) > 0:
             artist = weboutDecoded['response']['songs'][0]['artist_name']
             title =  weboutDecoded['response']['songs'][0]['title']
+        else:
+            logging.info("Nothing found for: " + audiofile)
     else:
         logging.error("  Error analyzing: " + stdout)   
         
     return [artist, title]
+
     
 def writeTags(properties, options, audiofile):
     ''' Write tags with eyed3
@@ -249,16 +264,17 @@ def writeTags(properties, options, audiofile):
     logging.debug("  %s" % " ".join(map(str, command)));
     status, stdout, stderr = shellutils.run(command);
     if status == 0:
-        logging.info("File modified: " + audiofile)
         for key in properties.keys():
             if properties[key] != None:
                 logging.info("  "+key+": \t" + str(properties[key]))
+        logging.info("File modified: " + audiofile)
     
+
 def rename(properties, options, audiofile):
     '''
     '''
     def escapeCharacters(input):
-        return input.replace("'", "") # Not needed!
+        return input.replace("'", "")
     
     newname = options['rename']
     newname = newname.replace("%a", escapeCharacters(properties['artist']))
@@ -277,19 +293,49 @@ def core(properties, options, files):
     '''This is the core, all program logic is performed here
     '''
     for audiofile in files:
+        # Do dict initialization
+        values = {}
+
         [fetchedArtist, fetchedTitle] = echoprint(audiofile)
+                
+        values['artist'] = fetchedArtist or properties['artist']
+        values['title'] = fetchedTitle or properties['title']
+        values['album'] = properties['album']
+        values['tracknum'] = properties['tracknum']
+        values['albumartist'] = properties['albumartist']
+        values['year'] = properties['year']
         
-        properties['artist'] = fetchedArtist or properties['artist']
-        properties['title'] = fetchedTitle or properties['title']
-        
-        writeTags(properties,
-                  options,
-                  audiofile)
+        if values['album'] == None and \
+           values['title'] == None and \
+           values['artist'] == None and \
+           values['tracknum'] == None and \
+           values['albumartist'] == None and \
+           values['year'] == None:
+           
+            logging.info("File not modified: " + audiofile)
+            
+        else:
+            if options['ask'] != None:
+                print "I'm going to set this tags to this file " + audiofile
+                for key in values.keys():
+                    if values[key] != None:
+                        print "  "+key+": \t" + str(values[key])
+                if options['rename'] != None:
+                    print "And I'm going to rename it too."
+                print "Do you want it? (Y/n)"
+                ok = raw_input().lower()
+                if ok is not None and ok == 'n':
+                    print "Ok, i won't do that.."
+                    continue
+                
+            writeTags(values,
+                      options,
+                      audiofile)
          
-        if options['rename'] != None:
-            rename(properties,
-                   options, 
-                   audiofile)
+            if options['rename'] != None:
+                rename(values,
+                       options, 
+                       audiofile)
 
 def main():
     '''This is the main procedure, is detached to provide compatibility with the updater
